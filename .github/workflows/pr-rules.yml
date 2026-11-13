@@ -1,0 +1,33 @@
+name: PR 규칙
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  pr-rules:
+    name: pr-rules
+    runs-on: ubuntu-latest
+    steps:
+      - name: 브랜치 · 제목 · 본문 형식 확인
+        env:
+          BRANCH: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          types='feat|fix|infra|docs|test|refactor|chore|style'
+          fail=0
+          printf '%s' "$BRANCH" | grep -Eq "^($types)/[0-9]+/[a-z0-9-]+$" \
+            || { echo "::error::브랜치 이름은 종류/이슈번호/내용 형식입니다. 예: feat/12/sensor-ingest"; fail=1; }
+          # [영역]은 선택. MSA가 확정되면 뒤쪽 대안(|[^[ ].*)을 지워 필수로 바꾼다.
+          printf '%s' "$TITLE" | grep -Eq "^($types) : (\[[a-z0-9-]+\] [^[ ].*|[^[ ].*)$" \
+            || { echo "::error::PR 제목은 '종류 : [영역] 내용' 형식입니다. 예: feat : [sensor] 센서 수집 API"; fail=1; }
+          printf '%s' "$BODY" | grep -Eq "Closes #[0-9]+" \
+            || { echo "::error::PR 본문 '관련 이슈'에 Closes #이슈번호 를 적어야 합니다."; fail=1; }
+          for h in '## 관련 이슈' '## 변경 내용' '## 다른 영역(서비스) 영향' '## 확인 방법' '## 체크리스트'; do
+            printf '%s' "$BODY" | grep -Fq "$h" \
+              || { echo "::error::PR 본문에 템플릿 항목이 빠졌습니다: $h"; fail=1; }
+          done
+          exit $fail
